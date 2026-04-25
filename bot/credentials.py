@@ -119,7 +119,7 @@ def get_api_key() -> str:
 def get_agent_private_key() -> str:
     """Resolve agent PK from env → wallet file."""
     from bot.config import AGENT_PRIVATE_KEY
-    if AGENT_PRIVATE_KEY:
+    if AGENT_PRIVATE_KEY and current_bot_id.get() == "default":
         return AGENT_PRIVATE_KEY
     wallet = load_agent_wallet()
     return wallet.get("privateKey", "") if wallet else ""

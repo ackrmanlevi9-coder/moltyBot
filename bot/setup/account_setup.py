@@ -137,11 +137,19 @@ async def run_first_run_intake() -> dict:
         log.info("Non-interactive mode (Railway/Docker detected)")
 
     # Step 1: Agent name
-    agent_name = _ask_or_env(
+    base_name = _ask_or_env(
         "Enter agent name (max 50 chars): ",
         AGENT_NAME,
         "MoltyAgent",
     )
+    from bot.credentials import current_bot_id
+    b_id = current_bot_id.get()
+    if b_id != "default" and b_id.startswith("bot"):
+        # e.g., "bot1" -> extracts "1"
+        num = b_id.replace("bot", "")
+        agent_name = f"{base_name}-{num}"
+    else:
+        agent_name = base_name
     if len(agent_name) > 50:
         agent_name = agent_name[:50]
 
