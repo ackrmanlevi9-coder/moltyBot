@@ -437,9 +437,18 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
         if target:
             w_range = get_weapon_range(equipped)
             if _is_in_range(target, region_id, w_range, connections):
-                return {"action": "attack",
-                        "data": {"targetId": target["id"], "targetType": "monster"},
-                        "reason": f"MONSTER FARM: {target.get('name', 'monster')} HP={target.get('hp', '?')}"}
+                my_dmg = calc_damage(atk, get_weapon_bonus(equipped),
+                                    target.get("def", 5), region_weather)
+                enemy_dmg = calc_damage(target.get("atk", 10),
+                                         _estimate_enemy_weapon_bonus(target),
+                                         defense, region_weather)
+                target_hp = target.get("hp", 100)
+                
+                # Check if it's safe to fight the monster (e.g. Bandits hit hard!)
+                if my_dmg >= (enemy_dmg * 0.8) or target_hp <= my_dmg * 3:
+                    return {"action": "attack",
+                            "data": {"targetId": target["id"], "targetType": "monster"},
+                            "reason": f"MONSTER FARM: {target.get('name', 'monster')} HP={target_hp} (dmg={my_dmg} vs {enemy_dmg})"}
 
     # ── Priority 7b: Moderate healing (HP < 70, safe area) ────────
     if hp < 70 and not enemies:
