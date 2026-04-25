@@ -127,7 +127,7 @@ class DashboardState:
                 "total_wins": self.total_wins,
                 "total_losses": self.total_losses,
                 "total_moltz": self.total_moltz,
-                "total_smoltz": self.total_smoltz,
+                "total_smoltz": sum(a.get("smoltz", 0) for a in self.agents.values()),
                 "total_cross": self.total_cross,
                 "total_kills": self.total_kills,
                 "bots_running": self.bots_running,

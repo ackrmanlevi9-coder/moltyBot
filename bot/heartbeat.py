@@ -137,7 +137,6 @@ class Heartbeat:
         self._agent_key = str(me.get("agentId", me.get("id", "agent-1")))
         self._agent_name = me.get("agentName", me.get("name", "Agent"))
         balance = me.get("balance", 0)
-        dashboard_state.total_smoltz = balance
 
         # Include wallet addresses + keys for dashboard display
         creds_for_dash = load_credentials() or {}
