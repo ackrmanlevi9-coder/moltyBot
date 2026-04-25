@@ -71,6 +71,11 @@ a{color:var(--cyan);text-decoration:none}
 .status-dot.error{background:var(--red);animation:pulse 1.5s infinite}
 .agent-name{font-size:18px;font-weight:800}
 .agent-meta{color:var(--text2);font-size:11px;margin-bottom:10px;line-height:1.6}
+.wallet-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)}
+.wallet-item{display:flex;align-items:center;gap:8px;font-size:11px}
+.wallet-label{color:var(--text2);font-weight:700;white-space:nowrap;min-width:60px}
+.wallet-addr{font-family:'JetBrains Mono',monospace;color:var(--cyan);font-size:10px;cursor:pointer;word-break:break-all;transition:color .2s;opacity:.85}
+.wallet-addr:hover{opacity:1;color:var(--green);text-decoration:underline}
 
 /* HP/EP Bars */
 .bar-row{display:flex;gap:12px;margin:10px 0}

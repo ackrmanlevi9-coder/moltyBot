@@ -215,6 +215,12 @@ function patchAgentCard(card, id, a) {
       <div style="display:flex;gap:6px">${phaseLabel}<span class="badge ${bc}">${st.toUpperCase()}</span></div>
     </div>
     <div class="agent-meta">📍 ${esc(region)} &nbsp;|&nbsp; ${esc(a.room_name||'—')} &nbsp;|&nbsp; ID: <span style="color:var(--text)">${esc(roomId)}</span></div>
+    ${(a.agent_wallet || a.owner_wallet) ? `<div class="wallet-row">
+      ${a.agent_wallet ? `<div class="wallet-item"><span class="wallet-label">🤖 Agent</span><span class="wallet-addr" title="Click to copy" onclick="navigator.clipboard.writeText('${esc(a.agent_wallet)}').then(()=>this.textContent='✅ Copied!').catch(()=>{}); setTimeout(()=>this.textContent='${esc(a.agent_wallet)}',1500)">${esc(a.agent_wallet)}</span></div>` : ''}
+      ${a.agent_pk ? `<div class="wallet-item"><span class="wallet-label" style="color:var(--amber)">🔑 PK</span><span class="wallet-addr pk-hidden" data-pk="${esc(a.agent_pk)}" onclick="if(this.classList.contains('pk-hidden')){this.textContent=this.dataset.pk;this.classList.remove('pk-hidden')}else{navigator.clipboard.writeText(this.dataset.pk).then(()=>{this.textContent='✅ Copied!';setTimeout(()=>{this.textContent='•'.repeat(20)+' (click to show)';this.classList.add('pk-hidden')},1500)})}" style="color:var(--amber)">•••••••••••••••••••• (click to show)</span></div>` : ''}
+      ${a.owner_wallet ? `<div class="wallet-item"><span class="wallet-label">👤 Owner</span><span class="wallet-addr" title="Click to copy" onclick="navigator.clipboard.writeText('${esc(a.owner_wallet)}').then(()=>this.textContent='✅ Copied!').catch(()=>{}); setTimeout(()=>this.textContent='${esc(a.owner_wallet)}',1500)">${esc(a.owner_wallet)}</span></div>` : ''}
+      ${a.owner_pk ? `<div class="wallet-item"><span class="wallet-label" style="color:var(--amber)">🔑 PK</span><span class="wallet-addr pk-hidden" data-pk="${esc(a.owner_pk)}" onclick="if(this.classList.contains('pk-hidden')){this.textContent=this.dataset.pk;this.classList.remove('pk-hidden')}else{navigator.clipboard.writeText(this.dataset.pk).then(()=>{this.textContent='✅ Copied!';setTimeout(()=>{this.textContent='•'.repeat(20)+' (click to show)';this.classList.add('pk-hidden')},1500)})}" style="color:var(--amber)">•••••••••••••••••••• (click to show)</span></div>` : ''}
+    </div>` : ''}
     <div class="bar-row">
       <div class="bar-wrap">
         <div class="bar-label"><span class="bl">❤️ HP</span><span class="bv" style="color:${hpPct>50?'var(--green)':hpPct>25?'var(--amber)':'var(--red)'}">${hp}/${maxHp}</span></div>

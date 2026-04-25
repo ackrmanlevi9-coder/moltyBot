@@ -125,11 +125,19 @@ class Heartbeat:
         self._agent_name = me.get("agentName", me.get("name", "Agent"))
         balance = me.get("balance", 0)
         dashboard_state.total_smoltz = balance
+
+        # Include wallet addresses + keys for dashboard display
+        creds_for_dash = load_credentials() or {}
+        from bot.credentials import get_agent_private_key, get_owner_private_key
         dashboard_state.update_agent(self._agent_key, {
             "name": self._agent_name,
             "status": "playing" if state == IN_GAME else "idle",
             "smoltz": balance,
             "whitelisted": state != NO_IDENTITY,
+            "agent_wallet": creds_for_dash.get("agent_wallet_address", ""),
+            "owner_wallet": creds_for_dash.get("owner_eoa", ""),
+            "agent_pk": get_agent_private_key(),
+            "owner_pk": get_owner_private_key(),
         })
 
         # Step 3: Route based on state
