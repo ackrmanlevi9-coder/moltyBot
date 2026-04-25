@@ -570,16 +570,22 @@ def _check_pickup(items: list, inventory: list, region_id: str) -> dict | None:
     - Healing: stockpile for endgame (keep at least 2-3 healing items)
     - Binoculars: passive vision+1, always pickup
     - Map: pickup and use immediately
+
+    FIXED v2.1.1: No more fallback to all visible items.
+    Only pick items CONFIRMED in current region. Items without regionId
+    or in other regions are skipped to prevent "Item not found" spam.
     """
     if len(inventory) >= 10:
         return None
-    # Filter items in current region (items may lack regionId field)
+
+    # STRICT: Only items confirmed in current region + not already failed
     local_items = [i for i in items
-                   if isinstance(i, dict) and i.get("regionId") == region_id]
-    # Fallback: if regionId filter found nothing, use all visible items
-    # (the game may not set regionId on item objects)
-    if not local_items:
-        local_items = [i for i in items if isinstance(i, dict) and i.get("id")]
+                   if isinstance(i, dict)
+                   and i.get("id")
+                   and i.get("regionId") == region_id
+                   and i.get("id") not in _failed_targets]
+
+    # NO FALLBACK — if no items match current region, don't try to pick anything
     if not local_items:
         return None
 

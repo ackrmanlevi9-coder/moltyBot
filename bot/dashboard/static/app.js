@@ -188,6 +188,7 @@ function patchAgentCard(card, id, a) {
   const weapon = a.weapon || 'fist';
   const kills = a.kills || 0;
   const region = a.region || '—';
+  const roomId = a.room_id || '—';
 
   const inv = (a.inventory||[]).map(i => itemTag(i)).join('') || '<span style="color:var(--text2)">Empty</span>';
   const enemies = (a.enemies||[]).map(e => `<span class="item-tag" style="border-left:2px solid var(--red)">👤 ${esc(e.name||'?')} HP:${e.hp}</span>`).join('') || '<span style="color:var(--text2)">Clear</span>';
@@ -213,7 +214,7 @@ function patchAgentCard(card, id, a) {
       <div>${statusIcon}<span class="agent-name">${esc(name)}</span></div>
       <div style="display:flex;gap:6px">${phaseLabel}<span class="badge ${bc}">${st.toUpperCase()}</span></div>
     </div>
-    <div class="agent-meta">📍 ${esc(region)} &nbsp;|&nbsp; ${esc(a.room_name||'—')}</div>
+    <div class="agent-meta">📍 ${esc(region)} &nbsp;|&nbsp; ${esc(a.room_name||'—')} &nbsp;|&nbsp; ID: <span style="color:var(--text)">${esc(roomId)}</span></div>
     <div class="bar-row">
       <div class="bar-wrap">
         <div class="bar-label"><span class="bl">❤️ HP</span><span class="bv" style="color:${hpPct>50?'var(--green)':hpPct>25?'var(--amber)':'var(--red)'}">${hp}/${maxHp}</span></div>

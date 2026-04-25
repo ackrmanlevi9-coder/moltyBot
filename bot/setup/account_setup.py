@@ -55,7 +55,33 @@ def _restore_from_env() -> dict | None:
     agent_name = os.getenv("AGENT_NAME", "")
 
     if not api_key or not agent_pk:
-        return None  # No env credentials — truly first run
+        # CASE 1: VPS with .env persistence — SETUP_COMPLETE in .env, wallet files on disk
+        setup_done = os.getenv("SETUP_COMPLETE", "").lower() == "true"
+        if setup_done and api_key and not agent_pk:
+            # Has API key but no private key in env — try wallet files (VPS only)
+            agent_wallet = load_agent_wallet()
+            if agent_wallet and agent_wallet.get("privateKey"):
+                agent_pk = agent_wallet["privateKey"]
+                agent_addr = agent_wallet.get("address", "") or agent_addr
+                owner_wallet = load_owner_wallet()
+                if owner_wallet:
+                    owner_pk = owner_wallet.get("privateKey", "")
+                    owner_addr = owner_wallet.get("address", "") or owner_addr
+                log.info("♻️ Restoring from SETUP_COMPLETE + wallet files (VPS mode)...")
+            else:
+                # On Railway: dev-agent/ is ephemeral, wallet files may be gone
+                # Need AGENT_PRIVATE_KEY in Railway Variables for restore to work
+                log.warning(
+                    "⚠️ SETUP_COMPLETE=true but AGENT_PRIVATE_KEY not in env and "
+                    "wallet files not found. Need to re-run first-run intake. "
+                    "If on Railway: ensure AGENT_PRIVATE_KEY is set in Variables."
+                )
+                return None  # Will trigger re-setup
+        elif not api_key:
+            return None  # No API key at all — truly first run
+        # If api_key is set but no agent_pk and no SETUP_COMPLETE, also first run
+        elif not agent_pk and not setup_done:
+            return None
 
     log.info("♻️ Restoring credentials from Railway Variables (env vars)...")
 
@@ -205,6 +231,11 @@ async def run_first_run_intake() -> dict:
     if is_railway():
         log.info("Detected Railway — syncing all variables in one batch...")
         await sync_all_to_railway(creds, agent_pk, owner_pk)
+
+    # Always mark SETUP_COMPLETE in .env (works on VPS + Railway)
+    # Prevents re-generating wallets on restart
+    update_env_file("SETUP_COMPLETE", "true")
+    log.info("✅ SETUP_COMPLETE=true written to .env")
 
     return creds
 

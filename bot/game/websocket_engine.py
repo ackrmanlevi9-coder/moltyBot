@@ -430,7 +430,8 @@ class WebSocketEngine:
             return
 
         # Track last action target for failure handling
-        self._last_action_target = action_data.get("targetId", "")
+        # Attacks use targetId, pickups use itemId — track both
+        self._last_action_target = action_data.get("targetId", "") or action_data.get("itemId", "")
         self._last_action_type = action_type
 
         # Build and send per actions.md envelope spec
