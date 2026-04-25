@@ -1,13 +1,26 @@
 version: "3.8"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MOLTY ROYALE MULTI-AGENT SCALER (VPS & LOCAL)
+# Jalankan perintah: docker-compose up -d --build
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 services:
   molty-bot:
     build: .
-    env_file: .env
+    container_name: molty-bot-multi
+    env_file: .env # Membaca OWNER_EOA dan config lain dari .env
+    environment:
+      - NUM_AGENTS=10 # Ganti angka ini sesuai jumlah bot yang kamu mau (1-50)
+      - PORT=8080
+    ports:
+      - "8080:8080"
     volumes:
+      # Data private key masing-masing bot akan tersimpan di dalam folder data/
+      - ./data:/app/data
       - molty-memory:/root/.molty-royale
-      - ./dev-agent:/app/dev-agent
     restart: unless-stopped
-    stdin_open: true  # For first-run intake prompts
+    stdin_open: true
 
 volumes:
   molty-memory:

@@ -43,11 +43,8 @@ WS_RATE_LIMIT = 120     # messages/min per connection
 COOLDOWN_DURATION = 60  # seconds
 
 # ── Credential paths ─────────────────────────────────────────────────
-DEV_AGENT_DIR = Path("dev-agent")
-CREDENTIALS_FILE = DEV_AGENT_DIR / "credentials.json"
-OWNER_INTAKE_FILE = DEV_AGENT_DIR / "owner-intake.json"
-AGENT_WALLET_FILE = DEV_AGENT_DIR / "agent-wallet.json"
-OWNER_WALLET_FILE = DEV_AGENT_DIR / "owner-wallet.json"
+# Paths are now dynamically generated in bot/credentials.py using contextvars
+# to support multiple agents concurrently.
 MEMORY_DIR = Path.home() / ".molty-royale"
 MEMORY_FILE = MEMORY_DIR / "molty-royale-context.json"
 

@@ -337,15 +337,15 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
     # (Death zone escape already handled above as Priority 1)
 
     # ── Priority 3: Healing management ─────────────────────────────
-    # HP < 30 = CRITICAL: use Bandage first (30 HP), then Medkit (50 HP)
-    # HP < 70 = MODERATE: use Emergency Food first (20 HP), save better items
-    if hp < 30:
+    # HP < 45 = CRITICAL: use Bandage first (30 HP), then Medkit (50 HP)
+    # HP < 65 = MODERATE: use Emergency Food first, save better items
+    if hp < 45:
         heal = _find_healing_item(inventory, critical=True)
         if heal:
             return {"action": "use_item", "data": {"itemId": heal["id"]},
                     "reason": f"CRITICAL HEAL: HP={hp}, using {heal.get('typeId', 'heal')}"}
-    elif hp < 50 and phase != "early":
-        # Mid/late game: heal at HP<50 to stay combat-ready
+    elif hp < 65 and phase != "early":
+        # Mid/late game: heal to stay combat-ready
         heal = _find_healing_item(inventory, critical=False)
         if heal:
             return {"action": "use_item", "data": {"itemId": heal["id"]},

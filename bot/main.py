@@ -21,13 +21,21 @@ def main():
     log.info("Molty Royale AI Agent v2.0.0")
     log.info("Press Ctrl+C to stop")
 
-    heartbeat = Heartbeat()
-
     async def run_all():
         # Start dashboard server (non-blocking)
         await start_dashboard(port=DASHBOARD_PORT)
+        
+        num_agents = int(os.getenv("NUM_AGENTS", "10"))
+        log.info(f"Starting {num_agents} bots side-by-side...")
+        
+        tasks = []
+        for i in range(1, num_agents + 1):
+            bot_id = f"bot{i}"
+            hb = Heartbeat(bot_id=bot_id)
+            tasks.append(asyncio.create_task(hb.run()))
+            
         # Run heartbeat (main bot loop — runs forever)
-        await heartbeat.run()
+        await asyncio.gather(*tasks)
 
     try:
         if sys.platform == "win32":

@@ -28,19 +28,32 @@ log = get_logger(__name__)
 
 
 class Heartbeat:
-    """Main heartbeat loop — runs forever, manages the full agent lifecycle."""
+    """Main heartbeat loop — runs forever, manages the full agent lifecycle.
+    Supports running multiple agents in a single Python process."""
 
-    def __init__(self):
+    def __init__(self, bot_id: str = "default"):
+        self.bot_id = bot_id
         self.api: MoltyAPI | None = None
+        # Provide a dedicated memory file for each bot
+        from bot.config import MEMORY_DIR
+        mem_file = MEMORY_DIR / f"context-{bot_id}.json" if bot_id != "default" else MEMORY_DIR / "molty-royale-context.json"
+        
+        from bot.credentials import current_bot_id
+        current_bot_id.set(bot_id)
+        
         self.memory = AgentMemory()
+        self.memory.file_path = mem_file
         self.running = True
-        self._agent_key = "agent-1"  # Consistent dashboard key
+        self._agent_key = f"agent-{bot_id}"
         self._agent_name = "Agent"
 
     async def run(self):
         """Entry point — runs the heartbeat loop indefinitely."""
+        from bot.credentials import current_bot_id
+        current_bot_id.set(self.bot_id)
+        
         log.info("═══════════════════════════════════════════")
-        log.info("  MOLTY ROYALE AI AGENT — STARTING")
+        log.info("  MOLTY ROYALE AI AGENT [%s] — STARTING", self.bot_id)
         log.info("═══════════════════════════════════════════")
 
         # Log active config (answers to setup.md First-Run Intake)

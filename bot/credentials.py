@@ -5,21 +5,32 @@ All sensitive files stored in dev-agent/ with restricted permissions.
 import json
 import os
 import stat
+import contextvars
 from pathlib import Path
 from typing import Any, Optional
 
-from bot.config import (
-    CREDENTIALS_FILE, OWNER_INTAKE_FILE,
-    AGENT_WALLET_FILE, OWNER_WALLET_FILE, DEV_AGENT_DIR,
-)
+# Context variable to hold the ID of the current running bot across async tasks
+current_bot_id = contextvars.ContextVar("current_bot_id", default="default")
+
 from bot.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+def _get_dev_dir() -> Path:
+    """Get the dev-agent directory specific to the current context."""
+    bot_id = current_bot_id.get()
+    if bot_id == "default":
+        return Path("dev-agent")
+    return Path(f"data/{bot_id}/dev-agent")
+
+def _path_creds() -> Path: return _get_dev_dir() / "credentials.json"
+def _path_intake() -> Path: return _get_dev_dir() / "owner-intake.json"
+def _path_agent() -> Path: return _get_dev_dir() / "agent-wallet.json"
+def _path_owner() -> Path: return _get_dev_dir() / "owner-wallet.json"
 
 def _ensure_dir():
     """Create dev-agent/ directory if missing."""
-    DEV_AGENT_DIR.mkdir(parents=True, exist_ok=True)
+    _get_dev_dir().mkdir(parents=True, exist_ok=True)
 
 
 def _write_secure(path: Path, data: dict):
@@ -47,49 +58,53 @@ def _read_json(path: Path) -> Optional[dict]:
 
 def is_first_run() -> bool:
     """First-run if credentials.json or owner-intake.json is missing."""
-    return not CREDENTIALS_FILE.exists() or not OWNER_INTAKE_FILE.exists()
+    return not _path_creds().exists() or not _path_intake().exists()
 
 
 def load_credentials() -> Optional[dict]:
-    return _read_json(CREDENTIALS_FILE)
+    return _read_json(_path_creds())
 
 
 def save_credentials(data: dict):
-    _write_secure(CREDENTIALS_FILE, data)
-    log.info("Credentials saved to %s", CREDENTIALS_FILE)
+    p = _path_creds()
+    _write_secure(p, data)
+    log.info("Credentials saved to %s", p)
 
 
 def load_owner_intake() -> Optional[dict]:
-    return _read_json(OWNER_INTAKE_FILE)
+    return _read_json(_path_intake())
 
 
 def save_owner_intake(data: dict):
-    _write_secure(OWNER_INTAKE_FILE, data)
-    log.info("Owner intake saved to %s", OWNER_INTAKE_FILE)
+    p = _path_intake()
+    _write_secure(p, data)
+    log.info("Owner intake saved to %s", p)
 
 
 def load_agent_wallet() -> Optional[dict]:
-    return _read_json(AGENT_WALLET_FILE)
+    return _read_json(_path_agent())
 
 
 def save_agent_wallet(address: str, private_key: str):
-    _write_secure(AGENT_WALLET_FILE, {
+    p = _path_agent()
+    _write_secure(p, {
         "address": address,
         "privateKey": private_key,
     })
-    log.info("Agent wallet saved to %s", AGENT_WALLET_FILE)
+    log.info("Agent wallet saved to %s", p)
 
 
 def load_owner_wallet() -> Optional[dict]:
-    return _read_json(OWNER_WALLET_FILE)
+    return _read_json(_path_owner())
 
 
 def save_owner_wallet(address: str, private_key: str):
-    _write_secure(OWNER_WALLET_FILE, {
+    p = _path_owner()
+    _write_secure(p, {
         "address": address,
         "privateKey": private_key,
     })
-    log.info("Owner wallet saved to %s", OWNER_WALLET_FILE)
+    log.info("Owner wallet saved to %s", p)
 
 
 def get_api_key() -> str:
@@ -121,6 +136,10 @@ def get_owner_private_key() -> str:
 
 def update_env_file(key: str, value: str):
     """Update or append a key=value in .env file."""
+    # In multi-agent mode, skip updating .env to avoid concurrent file corruption
+    if current_bot_id.get() != "default":
+        return
+
     env_path = Path(".env")
     lines = []
     found = False
