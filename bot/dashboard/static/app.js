@@ -146,6 +146,7 @@ function renderHeader() {
   animateNum('h-dead', dead);
   animateNum('h-wins', s.total_wins || 0);
   animateNum('h-smoltz', s.total_smoltz || 0);
+  animateNum('h-moltz', s.total_moltz || 0);
   animateNum('h-kills', s.total_kills || 0);
   setText('h-rate', (s.action_rate || 0) + '%');
 }
@@ -270,7 +271,7 @@ function renderAgentsTable() {
   const tb = $('agents-tbody');
   if (!tb) return;
   const agents = Object.entries(S.agents || {});
-  if (!agents.length) { tb.innerHTML = '<tr><td colspan="7" style="color:var(--text2);text-align:center">No agents</td></tr>'; return; }
+  if (!agents.length) { tb.innerHTML = '<tr><td colspan="8" style="color:var(--text2);text-align:center">No agents</td></tr>'; return; }
   tb.innerHTML = agents.map(([id,a]) => {
     const st = a.status||'idle';
     const bc = st==='playing'?'ok':st==='dead'?'dead':st==='error'?'err':'warn';
@@ -279,7 +280,7 @@ function renderAgentsTable() {
     return `<tr><td><strong>${esc(a.name||id)}</strong></td><td><span class="badge ${bc}">${st}</span></td>
       <td style="color:${(a.hp||0)>50?'var(--green)':'var(--red)'}"><strong>${a.hp||0}</strong>/${a.maxHp||100}</td>
       <td>📍 ${esc(a.region||'—')}</td><td>${weaponDisplay}</td>
-      <td><strong>${a.kills||0}</strong></td><td>${fmt(a.smoltz||0)}</td></tr>`;
+      <td><strong>${a.kills||0}</strong></td><td>${fmt(a.smoltz||0)}</td><td><strong style="color:var(--amber)">${fmt(a.moltz_earned||0)}</strong></td></tr>`;
   }).join('');
 }
 

@@ -102,7 +102,15 @@ class DashboardState:
             self.total_wins += 1
         else:
             self.total_losses += 1
+        moltz_earned = game_data.get("moltz_earned", 0)
         self.total_kills += game_data.get("kills", 0)
+        self.total_moltz += moltz_earned
+
+        agent_key = game_data.get("agent_key")
+        if agent_key and agent_key in self.agents:
+            # Safely get current moltz_earned and add new earnings
+            current_moltz = self.agents[agent_key].get("moltz_earned", 0)
+            self.agents[agent_key]["moltz_earned"] = current_moltz + moltz_earned
 
     def set_account(self, account_data: dict):
         """Add or update account."""

@@ -9,7 +9,7 @@ from bot.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-async def settle_game(game_result: dict, entry_type: str, memory: AgentMemory):
+async def settle_game(game_result: dict, entry_type: str, memory: AgentMemory, agent_key: str = None):
     """
     Process game end:
     1. Extract final stats
@@ -41,6 +41,7 @@ async def settle_game(game_result: dict, entry_type: str, memory: AgentMemory):
         "entry_type": entry_type,
         "death_cause": death_cause,
         "survived_turns": survived_turns,
+        "agent_key": agent_key,
     })
 
     # Update memory

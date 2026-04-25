@@ -272,7 +272,7 @@ class Heartbeat:
         game_result = await engine.run()
 
         # Settle
-        await settle_game(game_result, entry_type, self.memory)
+        await settle_game(game_result, entry_type, self.memory, self._agent_key)
 
         log.info("Game complete. Starting next cycle in 5s...")
         await asyncio.sleep(5)
