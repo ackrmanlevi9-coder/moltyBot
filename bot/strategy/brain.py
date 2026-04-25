@@ -902,11 +902,16 @@ def _use_utility_item(inventory: list, hp: int, ep: int, alive_count: int) -> di
     for item in inventory:
         if not isinstance(item, dict):
             continue
+            
+        item_id = item.get("id", "")
+        if item_id in _failed_targets:
+            continue
+            
         type_id = item.get("typeId", "").lower()
         # Map: use immediately to reveal entire map
         if type_id == "map":
             log.info("🗺️ Using Map! Will reveal entire map for strategic learning.")
-            return {"action": "use_item", "data": {"itemId": item["id"]},
+            return {"action": "use_item", "data": {"itemId": item_id},
                     "reason": "UTILITY: Using Map — reveals entire map for DZ tracking"}
     return None
 

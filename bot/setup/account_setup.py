@@ -191,6 +191,18 @@ async def run_first_run_intake() -> dict:
         update_env_file("OWNER_EOA", owner_address)
 
     # Step 4: Create account via API
+    # Stagger creation to avoid 429 Rate Limits on multi-agent mode
+    b_id = current_bot_id.get()
+    if b_id != "default" and b_id.startswith("bot"):
+        try:
+            bot_idx = int(b_id.replace("bot", ""))
+            import random
+            import asyncio
+            # Stagger 1-3 seconds apart per bot
+            await asyncio.sleep(bot_idx * random.uniform(1.0, 2.5))
+        except ValueError:
+            pass
+
     log.info("Creating account via POST /accounts...")
     api = MoltyAPI()
     try:
@@ -235,8 +247,9 @@ async def run_first_run_intake() -> dict:
     save_owner_intake(intake)
 
     # Step 6: Auto-sync to Railway Variables (if on Railway)
+    # ONLY do this if we are running 1 single standard agent to avoid overwriting the Railway variables wildly.
     from bot.utils.railway_sync import is_railway, sync_all_to_railway
-    if is_railway():
+    if is_railway() and current_bot_id.get() == "default":
         log.info("Detected Railway — syncing all variables in one batch...")
         await sync_all_to_railway(creds, agent_pk, owner_pk)
 

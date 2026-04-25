@@ -154,10 +154,25 @@ function renderHeader() {
 function renderAgentCards() {
   const container = $('agent-cards');
   if (!container) return;
-  const agents = Object.entries(S.agents || {});
-  const hash = JSON.stringify(agents.map(([id,a]) => id + (a.hp||0) + (a.ep||0) + (a.status||'') + (a.last_action||'') + (a.kills||0) + (a.alive_count||0) + (a.inventory||[]).length + (a.enemies||[]).length + (a.region_items||[]).length + (a.region||'')));
+  const entries = Object.entries(S.agents || {});
+  
+  // Sort by status (playing first, then idle, then dead) and then numerically by Agent Name/ID
+  const statusWeight = { 'playing': 0, 'idle': 1, 'error': 2, 'dead': 3 };
+  entries.sort((a, b) => {
+    const w1 = statusWeight[a[1].status || 'idle'] || 0;
+    const w2 = statusWeight[b[1].status || 'idle'] || 0;
+    if (w1 !== w2) return w1 - w2;
+    // Extract numbers from id (e.g. "agent-bot2" vs "agent-bot10")
+    const n1 = parseInt(a[0].match(/\d+/)) || 0;
+    const n2 = parseInt(b[0].match(/\d+/)) || 0;
+    return n1 - n2;
+  });
+
+  const hash = JSON.stringify(entries.map(([id,a]) => id + (a.hp||0) + (a.ep||0) + (a.status||'') + (a.last_action||'') + (a.kills||0) + (a.alive_count||0) + (a.inventory||[]).length + (a.enemies||[]).length + (a.region_items||[]).length + (a.region||'')));
   if (hash === prevAgentHash) return;
   prevAgentHash = hash;
+
+  const agents = entries;
 
   if (!agents.length) {
     container.innerHTML = '<div class="card glass" style="text-align:center;padding:40px;color:var(--text2)"><div class="loader"></div><p style="margin-top:16px">Waiting for agent connection...</p></div>';
