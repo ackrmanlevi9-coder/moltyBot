@@ -2,12 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KBG Molty Royale — Command Center</title>
-<link rel="stylesheet" href="/static/style.css?v=20260423c">
+<title>Molty Royale — Command Center</title>
+<link rel="stylesheet" href="/static/style.css?v=20260425a">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
 </head>
 <body>
 <nav class="sidebar">
-  <div class="logo"><h2>KBG MOLTY ROYALE</h2><span>Command Center v2</span></div>
+  <div class="logo">
+    <div class="logo-icon">⚔️</div>
+    <h2>MOLTY ROYALE</h2>
+    <span>Command Center v3</span>
+  </div>
   <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     <span class="nav-text">Dashboard</span>
@@ -16,126 +21,208 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/></svg>
     <span class="nav-text">Agents</span>
   </div>
-  <div class="nav-sep"></div>
-  <div class="nav-item" data-page="accounts" onclick="showPage('accounts')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
-    <span class="nav-text">Accounts</span>
+  <div class="nav-item" data-page="history" onclick="showPage('history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span class="nav-text">History</span>
   </div>
-  <div class="nav-item" data-page="data" onclick="showPage('data')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <span class="nav-text">Data</span>
+  <div class="nav-sep"></div>
+  <div class="nav-item" data-page="strategy" onclick="showPage('strategy')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    <span class="nav-text">Strategy</span>
+  </div>
+  <div class="nav-item" data-page="logs" onclick="showPage('logs')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    <span class="nav-text">Logs</span>
   </div>
   <div class="nav-item" data-page="export" onclick="showPage('export')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     <span class="nav-text">Export</span>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="uptime-display">
+      <span class="uptime-dot"></span>
+      <span id="uptime-text">0h 0m</span>
+    </div>
   </div>
 </nav>
 
 <div class="main">
+  <!-- Top Stats Bar -->
   <div class="header">
-    <div class="stat-pill cyan"><span class="val" id="h-agents">0</span><span>Agents</span></div>
-    <div class="stat-pill green"><span class="val" id="h-playing">0</span><span>Playing</span></div>
-    <div class="stat-pill"><span class="val" style="color:var(--red)" id="h-dead">0</span><span>Dead</span></div>
-    <div class="stat-pill cyan"><span class="val" id="h-wins">0</span><span>Wins</span></div>
-    <div class="stat-pill amber"><span class="val" id="h-moltz">0</span><span>Moltz</span></div>
-    <div class="stat-pill amber"><span class="val" id="h-smoltz">0</span><span>sMoltz</span></div>
+    <div class="stat-pill glow-cyan"><div class="pill-icon">🤖</div><div class="pill-body"><span class="val" id="h-agents">0</span><span>Agents</span></div></div>
+    <div class="stat-pill glow-green"><div class="pill-icon">🎮</div><div class="pill-body"><span class="val" id="h-playing">0</span><span>Playing</span></div></div>
+    <div class="stat-pill glow-red"><div class="pill-icon">💀</div><div class="pill-body"><span class="val" id="h-dead">0</span><span>Dead</span></div></div>
+    <div class="stat-pill glow-green"><div class="pill-icon">🏆</div><div class="pill-body"><span class="val" id="h-wins">0</span><span>Wins</span></div></div>
+    <div class="stat-pill glow-amber"><div class="pill-icon">💰</div><div class="pill-body"><span class="val" id="h-smoltz">0</span><span>sMoltz</span></div></div>
+    <div class="stat-pill glow-purple"><div class="pill-icon">⚔️</div><div class="pill-body"><span class="val" id="h-kills">0</span><span>Kills</span></div></div>
+    <div class="stat-pill glow-cyan"><div class="pill-icon">📊</div><div class="pill-body"><span class="val" id="h-rate">0%</span><span>Action Rate</span></div></div>
   </div>
 
   <div class="content">
-    <!-- Dashboard -->
+    <!-- ═══ Dashboard Page ═══ -->
     <div class="page active" id="page-dashboard">
       <div class="agent-grid" id="agent-cards">
-        <div class="card" style="text-align:center;padding:40px;color:var(--text2)">
-          <span class="status-dot idle"></span> Connecting...
+        <div class="card glass" style="text-align:center;padding:40px;color:var(--text2)">
+          <div class="loader"></div>
+          <p style="margin-top:16px">Connecting to bot engine...</p>
         </div>
       </div>
 
-      <!-- Log Panel — only visible on dashboard -->
-      <div class="log-panel">
-        <h3>Live Logs</h3>
-        <div class="log-tabs">
-          <div class="log-tab active" onclick="switchLogTab('all',this)">All</div>
-          <span id="agent-log-tabs"></span>
+      <!-- Compact Log Panel -->
+      <div class="log-panel glass">
+        <div class="log-header">
+          <h3>📡 Live Feed</h3>
+          <div class="log-tabs">
+            <div class="log-tab active" onclick="switchLogTab('all',this)">All</div>
+            <span id="agent-log-tabs"></span>
+          </div>
         </div>
         <div class="log-box" id="log-box"></div>
       </div>
     </div>
 
-    <!-- Agents Overview -->
+    <!-- ═══ Agents Page ═══ -->
     <div class="page" id="page-agents">
-      <div class="card fade-in" style="margin-bottom:20px">
-        <h3>Agent Overview</h3>
-        <div style="display:flex;gap:16px;margin-bottom:16px">
-          <div class="stat-pill green"><span class="val" id="ov-active">0</span><span>Playing</span></div>
-          <div class="stat-pill amber"><span class="val" id="ov-idle">0</span><span>Idle</span></div>
-          <div class="stat-pill"><span class="val" style="color:var(--red)" id="ov-dead">0</span><span>Dead</span></div>
+      <div class="card glass fade-in" style="margin-bottom:20px">
+        <div class="section-title">
+          <h3>👾 Agent Overview</h3>
+          <div style="display:flex;gap:12px">
+            <div class="mini-stat green"><span class="val" id="ov-active">0</span> Playing</div>
+            <div class="mini-stat amber"><span class="val" id="ov-idle">0</span> Idle</div>
+            <div class="mini-stat red"><span class="val" id="ov-dead">0</span> Dead</div>
+          </div>
         </div>
         <table class="tbl">
-          <thead><tr><th>Agent</th><th>Status</th><th>Moltz</th><th>sMoltz</th><th>CROSS</th><th>Wins</th><th>Whitelist</th></tr></thead>
-          <tbody id="agents-tbody"><tr><td colspan="7" style="color:var(--text2);text-align:center">No agents</td></tr></tbody>
+          <thead><tr><th>Agent</th><th>Status</th><th>HP</th><th>Region</th><th>Weapon</th><th>Kills</th><th>sMoltz</th></tr></thead>
+          <tbody id="agents-tbody"><tr><td colspan="7" style="color:var(--text2);text-align:center">Waiting for agents...</td></tr></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Accounts — Coming Soon -->
-    <div class="page" id="page-accounts">
-      <div class="maintenance-wrap">
-        <div class="maint-icon">
-          <svg viewBox="0 0 80 80" fill="none" stroke="var(--cyan)" stroke-width="1.5">
-            <circle cx="40" cy="40" r="36" stroke-dasharray="6 4" class="spin-slow"/>
-            <circle cx="40" cy="40" r="24" stroke-dasharray="4 6" class="spin-reverse"/>
-            <path d="M40 20v6M40 54v6M20 40h6M54 40h6" stroke-width="2" stroke-linecap="round"/>
-            <circle cx="40" cy="40" r="6" fill="var(--cyan)" opacity=".3"/>
-          </svg>
+    <!-- ═══ History Page ═══ -->
+    <div class="page" id="page-history">
+      <div class="card glass fade-in">
+        <div class="section-title">
+          <h3>📜 Game History</h3>
+          <div style="display:flex;gap:12px">
+            <div class="mini-stat green"><span class="val" id="hist-wins">0</span> Wins</div>
+            <div class="mini-stat red"><span class="val" id="hist-losses">0</span> Losses</div>
+            <div class="mini-stat cyan"><span class="val" id="hist-winrate">0%</span> Winrate</div>
+          </div>
         </div>
-        <h2 class="maint-title">Account Manager</h2>
-        <div class="maint-badge">UNDER MAINTENANCE</div>
-        <p class="maint-desc">Multi-account management with wallet linking, API key rotation, and bulk operations is currently being engineered.</p>
-        <div class="maint-eta"><span class="maint-dot"></span> ETA: Next Update</div>
+        <table class="tbl">
+          <thead><tr><th>Time</th><th>Result</th><th>Rank</th><th>Kills</th><th>sMoltz</th><th>Room</th></tr></thead>
+          <tbody id="history-tbody"><tr><td colspan="6" style="color:var(--text2);text-align:center">No games played yet</td></tr></tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Data — Coming Soon -->
-    <div class="page" id="page-data">
-      <div class="maintenance-wrap">
-        <div class="maint-icon">
-          <svg viewBox="0 0 80 80" fill="none" stroke="var(--amber)" stroke-width="1.5">
-            <rect x="14" y="10" width="52" height="14" rx="3" stroke-dasharray="4 3" class="float-1"/>
-            <rect x="14" y="33" width="52" height="14" rx="3" stroke-dasharray="4 3" class="float-2"/>
-            <rect x="14" y="56" width="52" height="14" rx="3" stroke-dasharray="4 3" class="float-3"/>
-            <circle cx="26" cy="17" r="3" fill="var(--amber)" opacity=".5" class="blink"/>
-            <circle cx="26" cy="40" r="3" fill="var(--amber)" opacity=".5" class="blink-delay"/>
-            <circle cx="26" cy="63" r="3" fill="var(--green)" opacity=".5" class="blink"/>
-          </svg>
+    <!-- ═══ Strategy Page ═══ -->
+    <div class="page" id="page-strategy">
+      <div class="strategy-grid">
+        <div class="card glass fade-in">
+          <h3>🧠 Current Strategy Phase</h3>
+          <div class="phase-display" id="phase-display">
+            <div class="phase-item active" data-phase="early">
+              <div class="phase-icon">🌅</div>
+              <div class="phase-name">Early Game</div>
+              <div class="phase-desc">Explore & Loot</div>
+            </div>
+            <div class="phase-arrow">→</div>
+            <div class="phase-item" data-phase="mid">
+              <div class="phase-icon">⚡</div>
+              <div class="phase-name">Mid Game</div>
+              <div class="phase-desc">Farm & Position</div>
+            </div>
+            <div class="phase-arrow">→</div>
+            <div class="phase-item" data-phase="late">
+              <div class="phase-icon">🔥</div>
+              <div class="phase-name">Late Game</div>
+              <div class="phase-desc">Kill & Survive</div>
+            </div>
+          </div>
         </div>
-        <h2 class="maint-title">Data Center</h2>
-        <div class="maint-badge" style="border-color:var(--amber);color:var(--amber)">COMING SOON</div>
-        <p class="maint-desc">Real-time analytics dashboard with game history, win/loss charts, earnings tracking, and performance insights across all agents.</p>
-        <div class="maint-eta"><span class="maint-dot" style="background:var(--amber)"></span> In Development</div>
+        <div class="card glass fade-in">
+          <h3>📊 Action Performance</h3>
+          <div class="perf-grid">
+            <div class="perf-item">
+              <div class="perf-ring" id="perf-ring-success">
+                <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" class="ring-bg"/><circle cx="50" cy="50" r="42" class="ring-fill" id="ring-success"/></svg>
+                <div class="perf-val" id="perf-success-val">0%</div>
+              </div>
+              <div class="perf-label">Success Rate</div>
+            </div>
+            <div class="perf-item">
+              <div class="perf-num" id="perf-sent" style="color:var(--cyan)">0</div>
+              <div class="perf-label">Actions Sent</div>
+            </div>
+            <div class="perf-item">
+              <div class="perf-num" id="perf-ok" style="color:var(--green)">0</div>
+              <div class="perf-label">Succeeded</div>
+            </div>
+            <div class="perf-item">
+              <div class="perf-num" id="perf-fail" style="color:var(--red)">0</div>
+              <div class="perf-label">Failed</div>
+            </div>
+          </div>
+        </div>
+        <div class="card glass fade-in" style="grid-column:1/-1">
+          <h3>⚔️ Weapon Stats Reference</h3>
+          <table class="tbl">
+            <thead><tr><th>Weapon</th><th>ATK Bonus</th><th>Range</th><th>Type</th><th>Priority</th></tr></thead>
+            <tbody>
+              <tr><td>🥊 Fist</td><td>+0</td><td>0 (melee)</td><td>Melee</td><td class="text2">—</td></tr>
+              <tr><td>🔪 Knife</td><td class="text-amber">+5</td><td>0 (melee)</td><td>Melee</td><td><div class="prio-bar" style="width:25%"></div></td></tr>
+              <tr><td>⚔️ Sword</td><td class="text-amber">+8</td><td>0 (melee)</td><td>Melee</td><td><div class="prio-bar" style="width:40%"></div></td></tr>
+              <tr><td>🗡️ Katana</td><td class="text-green">+21</td><td>0 (melee)</td><td>Melee</td><td><div class="prio-bar" style="width:100%"></div></td></tr>
+              <tr><td>🏹 Bow</td><td class="text-amber">+3</td><td>1 (ranged)</td><td>Ranged</td><td><div class="prio-bar" style="width:15%"></div></td></tr>
+              <tr><td>🔫 Pistol</td><td class="text-amber">+6</td><td>1 (ranged)</td><td>Ranged</td><td><div class="prio-bar" style="width:30%"></div></td></tr>
+              <tr><td>🎯 Sniper</td><td class="text-green">+17</td><td>2 (long)</td><td>Ranged</td><td><div class="prio-bar" style="width:90%"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <!-- Export — Coming Soon -->
+    <!-- ═══ Logs Page (Full) ═══ -->
+    <div class="page" id="page-logs">
+      <div class="card glass fade-in" style="flex:1;display:flex;flex-direction:column">
+        <div class="section-title">
+          <h3>📋 Full Logs</h3>
+          <div class="log-tabs">
+            <div class="log-tab active" onclick="switchLogTab('all',this)">All</div>
+            <span id="full-log-tabs"></span>
+          </div>
+        </div>
+        <div class="log-box full-log" id="full-log-box"></div>
+      </div>
+    </div>
+
+    <!-- ═══ Export Page ═══ -->
     <div class="page" id="page-export">
-      <div class="maintenance-wrap">
-        <div class="maint-icon">
-          <svg viewBox="0 0 80 80" fill="none" stroke="var(--green)" stroke-width="1.5">
-            <path d="M40 16v28" stroke-width="2" stroke-linecap="round" class="float-2"/>
-            <polyline points="30 36 40 46 50 36" stroke-width="2" stroke-linecap="round" class="float-2"/>
-            <path d="M20 52h40v12H20z" rx="3" stroke-dasharray="4 3"/>
-            <line x1="28" y1="58" x2="52" y2="58" stroke-width="2" stroke-linecap="round" opacity=".4"/>
-          </svg>
+      <div class="export-grid">
+        <div class="card glass fade-in export-card" onclick="exportData()">
+          <div class="export-icon">📥</div>
+          <h3>Export Data</h3>
+          <p>Download all game data, logs, history, and strategy as JSON</p>
+          <button class="btn btn-cyan">Download JSON</button>
         </div>
-        <h2 class="maint-title">Export & Import</h2>
-        <div class="maint-badge" style="border-color:var(--green);color:var(--green)">COMING SOON</div>
-        <p class="maint-desc">Full data portability — export game logs, account configs, strategy profiles, and import backups with one click.</p>
-        <div class="maint-eta"><span class="maint-dot" style="background:var(--green)"></span> In Development</div>
+        <div class="card glass fade-in export-card">
+          <div class="export-icon">📤</div>
+          <h3>Import Data</h3>
+          <p>Restore previously exported data from a JSON backup file</p>
+          <label class="btn btn-outline" style="cursor:pointer">
+            Select File
+            <input type="file" accept=".json" onchange="importData(event)" style="display:none">
+          </label>
+        </div>
       </div>
     </div>
   </div>
 
 </div>
 
-<script src="/static/app.js?v=20260423d"></script>
+<script src="/static/app.js?v=20260425a"></script>
 </body>
 </html>

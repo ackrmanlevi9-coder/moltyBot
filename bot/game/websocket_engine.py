@@ -16,7 +16,7 @@ import websockets
 from bot.config import WS_URL, SKILL_VERSION
 from bot.credentials import get_api_key
 from bot.game.action_sender import ActionSender, COOLDOWN_ACTIONS, FREE_ACTIONS
-from bot.strategy.brain import decide_action, reset_game_state, learn_from_map
+from bot.strategy.brain import decide_action, reset_game_state, learn_from_map, mark_action_failed, clear_turn_failures
 from bot.dashboard.state import dashboard_state
 from bot.utils.rate_limiter import ws_limiter
 from bot.utils.logger import get_logger
@@ -72,6 +72,8 @@ class WebSocketEngine:
         self._ping_task = None
         self._running = False
         self._map_just_used = False  # Track if Map was used for learning
+        self._last_action_target = ""  # Track last action target for failure handling
+        self._last_action_type = ""    # Track last action type for failure handling
         # Dashboard key/name — set by heartbeat before .run()
         self.dashboard_key = agent_id  # fallback to agent_id
         self.dashboard_name = "Agent"
@@ -168,6 +170,9 @@ class WebSocketEngine:
             self.action_sender.can_act = msg.get("canAct", self.action_sender.can_act)
             self.action_sender.cooldown_remaining_ms = msg.get("cooldownRemainingMs", 0)
 
+            # Track action for dashboard stats
+            dashboard_state.record_action(success)
+
             if success:
                 data = msg.get("data", {})
                 action_msg = data.get("message", "") if isinstance(data, dict) else str(data)
@@ -180,6 +185,18 @@ class WebSocketEngine:
                 err_code = err.get("code", "") if isinstance(err, dict) else str(err)
                 err_msg = err.get("message", "") if isinstance(err, dict) else ""
                 log.warning("Action FAILED: %s — %s (canAct=%s)", err_code, err_msg, msg.get("canAct"))
+
+                # Track failed target to prevent retry loops
+                # Extract targetId from the last sent action
+                if self._last_action_target:
+                    mark_action_failed(target_id=self._last_action_target,
+                                       action_type=self._last_action_type)
+                    log.info("Marked target %s as failed — will try fallback action",
+                             self._last_action_target[:8])
+
+                # Re-evaluate with failure tracking if canAct is still True
+                if msg.get("canAct") and self.last_view:
+                    await self._on_agent_view(self.last_view)
 
         # ── can_act_changed ───────────────────────────────────────────
         # Per actions.md: canAct is at TOP LEVEL
@@ -201,6 +218,9 @@ class WebSocketEngine:
             if not view and isinstance(msg.get("data"), dict):
                 view = msg["data"].get("view")
                 turn_num = msg["data"].get("turn", turn_num)
+
+            # Clear failed action tracking for new turn
+            clear_turn_failures()
 
             log.info("Turn %s — processing view...", turn_num)
             if view and isinstance(view, dict):
@@ -408,6 +428,10 @@ class WebSocketEngine:
         if action_type in COOLDOWN_ACTIONS and not can_act:
             log.debug("Cooldown active — skipping %s", action_type)
             return
+
+        # Track last action target for failure handling
+        self._last_action_target = action_data.get("targetId", "")
+        self._last_action_type = action_type
 
         # Build and send per actions.md envelope spec
         payload = self.action_sender.build_action(

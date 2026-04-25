@@ -9,6 +9,16 @@ v1.5.2 changes:
 - connectedRegions: either full Region objects OR bare string IDs — type-check!
 - pendingDeathzones: entries are {id, name} objects
 
+v2.1.0 optimizations:
+- Fixed weapon stats to match DOCS.md combat-items (Knife +5, Sword +8, etc.)
+- Fixed _is_in_range: strict regionId check, no more "assume same region" fallback
+- Fixed move EP cost: base=3 per DOCS.md (was incorrectly 2)
+- Added explore action for item discovery
+- Added failed-action tracking to prevent infinite retry loops
+- Added phase-based strategy (early/mid/late game)
+- Added kill-potential combat scoring
+- Improved target selection with multi-factor scoring
+
 Uses ALL view fields from api-summary.md:
 - self: agent stats, inventory, equipped weapon
 - currentRegion: terrain, weather, connections, facilities
@@ -27,18 +37,20 @@ from bot.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# ── Weapon stats from combat-items.md ─────────────────────────────────
+# ── Weapon stats from DOCS.md combat-items ────────────────────────────
+# FIXED: Values now match DOCS.md exactly (were previously double/wrong)
 WEAPONS = {
-    "fist": {"bonus": 0, "range": 0},
-    "dagger": {"bonus": 10, "range": 0},
-    "sword": {"bonus": 20, "range": 0},
-    "katana": {"bonus": 35, "range": 0},
-    "bow": {"bonus": 5, "range": 1},
-    "pistol": {"bonus": 10, "range": 1},
-    "sniper": {"bonus": 28, "range": 2},
+    "fist":   {"bonus": 0,  "range": 0},
+    "knife":  {"bonus": 5,  "range": 0},  # DOCS says Knife +5
+    "dagger": {"bonus": 5,  "range": 0},  # Alias for knife
+    "sword":  {"bonus": 8,  "range": 0},  # DOCS says Sword +8
+    "katana": {"bonus": 21, "range": 0},  # DOCS says Katana +21
+    "bow":    {"bonus": 3,  "range": 1},  # DOCS says Bow +3
+    "pistol": {"bonus": 6,  "range": 1},  # DOCS says Pistol +6
+    "sniper": {"bonus": 17, "range": 2},  # DOCS says Sniper +17
 }
 
-WEAPON_PRIORITY = ["katana", "sniper", "sword", "pistol", "dagger", "bow", "fist"]
+WEAPON_PRIORITY = ["katana", "sniper", "sword", "pistol", "knife", "dagger", "bow", "fist"]
 
 # ── Item priority for pickup ──────────────────────────────────────────
 # Moltz = ALWAYS pickup (highest). Weapons > healing > utility.
@@ -46,7 +58,7 @@ WEAPON_PRIORITY = ["katana", "sniper", "sword", "pistol", "dagger", "bow", "fist
 ITEM_PRIORITY = {
     "rewards": 300,  # Moltz/sMoltz — ALWAYS pickup first
     "katana": 100, "sniper": 95, "sword": 90, "pistol": 85,
-    "dagger": 80, "bow": 75,
+    "knife": 80, "dagger": 80, "bow": 75,
     "medkit": 70, "bandage": 65, "emergency_food": 60, "energy_drink": 58,
     "binoculars": 55,  # Passive: vision +1 permanent, always pickup
     "map": 52,          # Use immediately to reveal entire map
@@ -68,6 +80,11 @@ WEATHER_COMBAT_PENALTY = {
     "fog": 0.10,    # -10%
     "storm": 0.15,  # -15%
 }
+
+# ── Failed action tracking (prevents retry loops) ─────────────────────
+_failed_targets: set = set()  # Target IDs that failed this turn
+_last_failed_action: str = ""  # Last action type that failed
+_explored_regions: set = set()  # Regions already explored this game
 
 
 def calc_damage(atk: int, weapon_bonus: int, target_def: int,
@@ -128,28 +145,66 @@ def _get_region_id(entry) -> str:
 
 def reset_game_state():
     """Reset per-game tracking state. Call when game ends."""
-    global _known_agents, _map_knowledge
+    global _known_agents, _map_knowledge, _failed_targets, _last_failed_action, _explored_regions
     _known_agents = {}
     _map_knowledge = {"revealed": False, "death_zones": set(), "safe_center": []}
+    _failed_targets = set()
+    _last_failed_action = ""
+    _explored_regions = set()
     log.info("Strategy brain reset for new game")
+
+
+def mark_action_failed(target_id: str = "", action_type: str = ""):
+    """Called by WebSocket engine when an action fails.
+    Prevents retry loops by tracking failed targets/actions.
+    """
+    global _failed_targets, _last_failed_action
+    if target_id:
+        _failed_targets.add(target_id)
+        log.debug("Marked target %s as failed (won't retry this turn)", target_id[:8])
+    if action_type:
+        _last_failed_action = action_type
+
+
+def clear_turn_failures():
+    """Called at start of each new turn to reset failure tracking."""
+    global _failed_targets, _last_failed_action
+    _failed_targets = set()
+    _last_failed_action = ""
+
+
+def _get_game_phase(alive_count: int) -> str:
+    """Determine game phase based on alive count.
+    Early: > 40 alive → focus on looting & exploring
+    Mid:   15-40 alive → farm monsters/guardians, start positioning
+    Late:  < 15 alive → aggressive combat, secure kills for ranking
+    """
+    if alive_count > 40:
+        return "early"
+    elif alive_count > 15:
+        return "mid"
+    else:
+        return "late"
 
 
 def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict | None:
     """
     Main decision engine. Returns action dict or None (wait).
 
-    Priority chain per game-loop.md §3 (v1.5.2):
+    Priority chain per game-loop.md §3 (v2.1.0 optimized):
     1. DEATHZONE ESCAPE (overrides everything — 1.34 HP/sec!)
     1b. Pre-escape pending death zone
     2. [DISABLED] Curse resolution — curse temporarily disabled in v1.5.2
     2b. Guardian threat evasion (guardians now attack players!)
-    3. Critical healing
+    3. Critical healing (HP < 30)
     3b. Use utility items (Map, Energy Drink)
-    4. Free actions (pickup, equip)
+    4. Free actions (pickup, equip) — always do first
     5. Guardian farming (120 sMoltz per kill — only 5 guardians!)
-    6. Favorable agent combat
+    6. Favorable agent combat (with kill-potential scoring)
     7. Monster farming
+    7b. Moderate healing (HP < 70, safe area)
     8. Facility interaction
+    8b. EXPLORE current region (NEW — discover items!)
     9. Strategic movement (NEVER into DZ or pending DZ)
     10. Rest
 
@@ -199,6 +254,9 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
     if not is_alive:
         return None  # Dead — wait for game_ended
 
+    # ── Determine game phase ──────────────────────────────────────
+    phase = _get_game_phase(alive_count)
+
     # ── Build FULL danger map (DZ + pending DZ) ───────────────────
     # Used by ALL movement decisions to NEVER move into danger.
     # v1.5.2: pendingDeathzones entries are {id, name} objects
@@ -246,7 +304,7 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
     # Guardians now ATTACK player agents directly! Flee if low HP.
     guardians_here = [a for a in visible_agents
                       if a.get("isGuardian", False) and a.get("isAlive", True)
-                      and a.get("regionId") == region_id]
+                      and _is_same_region(a, region_id)]
     if guardians_here and hp < 40 and ep >= move_ep_cost:
         # Low HP + guardian in same region = flee!
         safe = _find_safe_region(connections, danger_ids, view)
@@ -267,7 +325,7 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
     if equip_action:
         return equip_action
 
-    # Use utility items: Map (reveal map), Megaphone (broadcast)
+    # Use utility items: Map (reveal map), Energy Drink (EP recovery)
     util_action = _use_utility_item(inventory, hp, ep, alive_count)
     if util_action:
         return util_action
@@ -286,13 +344,14 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
         if heal:
             return {"action": "use_item", "data": {"itemId": heal["id"]},
                     "reason": f"CRITICAL HEAL: HP={hp}, using {heal.get('typeId', 'heal')}"}
-    elif hp < 70:
+    elif hp < 50 and phase != "early":
+        # Mid/late game: heal at HP<50 to stay combat-ready
         heal = _find_healing_item(inventory, critical=False)
         if heal:
             return {"action": "use_item", "data": {"itemId": heal["id"]},
-                    "reason": f"HEAL: HP={hp}, using {heal.get('typeId', 'heal')}"}
+                    "reason": f"HEAL: HP={hp}, using {heal.get('typeId', 'heal')} (mid/late game)"}
 
-    # ── Priority 4: EP recovery if cursed (EP=0) or very low ──────
+    # ── Priority 4: EP recovery if EP=0 ──────────────────────────
     if ep == 0:
         # Check for energy drink first
         energy_drink = _find_energy_drink(inventory)
@@ -304,56 +363,83 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
     # Only 5 guardians per free room — each worth 120 sMoltz!
     # Guardians now ATTACK back — only fight if we can win.
     guardians = [a for a in visible_agents
-                 if a.get("isGuardian", False) and a.get("isAlive", True)]
+                 if a.get("isGuardian", False) and a.get("isAlive", True)
+                 and a.get("id") not in _failed_targets]
     if guardians and ep >= 2 and hp >= 35:
-        target = _select_weakest(guardians)
-        w_range = get_weapon_range(equipped)
-        if _is_in_range(target, region_id, w_range, connections):
-            # v1.5.2: guardians fight back — check if we can take them
-            my_dmg = calc_damage(atk, get_weapon_bonus(equipped),
-                                target.get("def", 5), region_weather)
-            guardian_dmg = calc_damage(target.get("atk", 10),
-                                       _estimate_enemy_weapon_bonus(target),
-                                       defense, region_weather)
-            # Fight if we deal more damage OR target is low HP (finish off)
-            if my_dmg >= guardian_dmg or target.get("hp", 100) <= my_dmg * 3:
-                return {"action": "attack",
-                        "data": {"targetId": target["id"], "targetType": "agent"},
-                        "reason": f"GUARDIAN FARM: HP={target.get('hp','?')} "
-                                  f"(120 sMoltz! dmg={my_dmg} vs {guardian_dmg})"}
+        target = _select_best_target(guardians, atk, equipped, defense, region_weather,
+                                     region_id, connections)
+        if target:
+            w_range = get_weapon_range(equipped)
+            if _is_in_range(target, region_id, w_range, connections):
+                my_dmg = calc_damage(atk, get_weapon_bonus(equipped),
+                                    target.get("def", 5), region_weather)
+                guardian_dmg = calc_damage(target.get("atk", 10),
+                                           _estimate_enemy_weapon_bonus(target),
+                                           defense, region_weather)
+                # Fight if we deal more damage OR target is low HP (finish off)
+                if my_dmg >= guardian_dmg or target.get("hp", 100) <= my_dmg * 3:
+                    return {"action": "attack",
+                            "data": {"targetId": target["id"], "targetType": "agent"},
+                            "reason": f"GUARDIAN FARM: HP={target.get('hp','?')} "
+                                      f"(120 sMoltz! dmg={my_dmg} vs {guardian_dmg})"}
 
     # ── Priority 6: Favorable agent combat ────────────────────────
-    # Be more aggressive when fewer agents remain (late game)
-    # Per game-systems.md: avoid combat in storm(-15%) or fog(-10%)
-    hp_threshold = 40 if alive_count > 20 else 25
+    # Phase-adaptive aggression + kill-potential scoring
+    # Avoid combat in storm(-15%) or fog(-10%) unless we heavily outgun them
+    weather_penalty = WEATHER_COMBAT_PENALTY.get(region_weather, 0.0)
+    hp_threshold = _get_combat_hp_threshold(phase)
+
     enemies = [a for a in visible_agents
                if not a.get("isGuardian", False) and a.get("isAlive", True)
-               and a.get("id") != self_data.get("id")]
+               and a.get("id") != self_data.get("id")
+               and a.get("id") not in _failed_targets]
+
     if enemies and ep >= 2 and hp >= hp_threshold:
-        target = _select_weakest(enemies)
-        w_range = get_weapon_range(equipped)
-        if _is_in_range(target, region_id, w_range, connections):
-            my_dmg = calc_damage(atk, get_weapon_bonus(equipped),
-                                target.get("def", 5), region_weather)
-            enemy_dmg = calc_damage(target.get("atk", 10),
-                                     _estimate_enemy_weapon_bonus(target),
-                                     defense, region_weather)
-            # Fight only if we deal more damage or target is low HP
-            if my_dmg > enemy_dmg or target.get("hp", 100) <= my_dmg * 2:
-                return {"action": "attack",
-                        "data": {"targetId": target["id"], "targetType": "agent"},
-                        "reason": f"COMBAT: Target HP={target.get('hp', '?')}, "
-                                  f"dmg={my_dmg} vs enemy_dmg={enemy_dmg}"}
+        target = _select_best_target(enemies, atk, equipped, defense, region_weather,
+                                     region_id, connections)
+        if target:
+            w_range = get_weapon_range(equipped)
+            if _is_in_range(target, region_id, w_range, connections):
+                my_dmg = calc_damage(atk, get_weapon_bonus(equipped),
+                                    target.get("def", 5), region_weather)
+                enemy_dmg = calc_damage(target.get("atk", 10),
+                                         _estimate_enemy_weapon_bonus(target),
+                                         defense, region_weather)
+                target_hp = target.get("hp", 100)
+                # Kill potential: how many hits to kill?
+                hits_to_kill = max(1, (target_hp + my_dmg - 1) // my_dmg) if my_dmg > 0 else 99
+                hits_to_die = max(1, (hp + enemy_dmg - 1) // enemy_dmg) if enemy_dmg > 0 else 99
+
+                # Fight if: we can kill them before they kill us,
+                # OR target is very low HP (finish off), OR late game aggressive
+                should_fight = (
+                    hits_to_kill < hits_to_die  # We kill them first
+                    or target_hp <= my_dmg * 2  # Can kill in 1-2 hits
+                    or (phase == "late" and my_dmg >= enemy_dmg)  # Late game aggression
+                    or (weather_penalty == 0 and my_dmg > enemy_dmg)  # Clear weather advantage
+                )
+
+                if should_fight:
+                    return {"action": "attack",
+                            "data": {"targetId": target["id"], "targetType": "agent"},
+                            "reason": f"COMBAT: Target HP={target_hp}, "
+                                      f"dmg={my_dmg} vs {enemy_dmg}, "
+                                      f"kills_in={hits_to_kill} vs dies_in={hits_to_die} "
+                                      f"[{phase}]"}
 
     # ── Priority 7: Monster farming ───────────────────────────────
-    monsters = [m for m in visible_monsters if m.get("hp", 0) > 0]
-    if monsters and ep >= 2:
-        target = _select_weakest(monsters)
-        w_range = get_weapon_range(equipped)
-        if _is_in_range(target, region_id, w_range, connections):
-            return {"action": "attack",
-                    "data": {"targetId": target["id"], "targetType": "monster"},
-                    "reason": f"MONSTER FARM: {target.get('name', 'monster')} HP={target.get('hp', '?')}"}
+    monsters_here = [m for m in visible_monsters
+                     if m.get("hp", 0) > 0
+                     and m.get("id") not in _failed_targets]
+    if monsters_here and ep >= 2:
+        target = _select_best_target(monsters_here, atk, equipped, defense, region_weather,
+                                     region_id, connections)
+        if target:
+            w_range = get_weapon_range(equipped)
+            if _is_in_range(target, region_id, w_range, connections):
+                return {"action": "attack",
+                        "data": {"targetId": target["id"], "targetType": "monster"},
+                        "reason": f"MONSTER FARM: {target.get('name', 'monster')} HP={target.get('hp', '?')}"}
 
     # ── Priority 7b: Moderate healing (HP < 70, safe area) ────────
     if hp < 70 and not enemies:
@@ -370,14 +456,34 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
                     "data": {"interactableId": facility["id"]},
                     "reason": f"FACILITY: {facility.get('type', 'unknown')}"}
 
+    # ── Priority 8b: EXPLORE current region (NEW) ─────────────────
+    # Search current region for items if we haven't explored it yet
+    # and there's nothing better to do. Costs 2 EP.
+    if ep >= 2 and region_id and region_id not in _explored_regions:
+        # Don't explore if in death zone or pending DZ
+        if not region.get("isDeathZone") and region_id not in danger_ids:
+            # Early game: always explore for weapons
+            # Mid/late game: explore only if we have EP to spare
+            should_explore = (
+                phase == "early"
+                or (phase == "mid" and ep >= 4)
+                or (phase == "late" and ep >= 6)
+            )
+            if should_explore:
+                _explored_regions.add(region_id)
+                log.info("🔍 Exploring region %s for items (phase=%s)", region_id[:8], phase)
+                return {"action": "explore", "data": {},
+                        "reason": f"EXPLORE: Searching region for items [{phase} game]"}
+
     # ── Priority 9: Strategic movement ────────────────────────────
     # Use connectedRegions — NEVER move into DZ or pending DZ!
     if ep >= move_ep_cost and connections:
         move_target = _choose_move_target(connections, danger_ids,
-                                           region, visible_items, alive_count)
+                                           region, visible_items, alive_count,
+                                           phase, view)
         if move_target:
             return {"action": "move", "data": {"regionId": move_target},
-                    "reason": "EXPLORE: Moving to better position"}
+                    "reason": f"MOVE: Strategic positioning [{phase}]"}
 
     # ── Priority 10: Rest (EP < 4 and safe) ───────────────────────
     if ep < 4 and not enemies and not region.get("isDeathZone") and region_id not in danger_ids:
@@ -390,14 +496,42 @@ def decide_action(view: dict, can_act: bool, memory_temp: dict = None) -> dict |
 # ── Helper functions ──────────────────────────────────────────────────
 
 def _get_move_ep_cost(terrain: str, weather: str) -> int:
-    """Calculate move EP cost per game-systems.md.
-    Base: 2. Storm: +1. Water terrain: 3.
+    """Calculate move EP cost per DOCS.md.
+    FIXED: Base move cost is 3 EP (was incorrectly 2).
+    Storm and water terrain may increase it.
     """
+    base = 3  # DOCS.md: move costs 3 EP
     if terrain == "water":
-        return 3
+        return base + 1  # Water: extra penalty
     if weather == "storm":
-        return 3  # 2 base + 1 storm
-    return 2
+        return base + 1  # Storm: extra penalty
+    return base
+
+
+def _get_combat_hp_threshold(phase: str) -> int:
+    """Get minimum HP to engage in combat based on game phase.
+    Early game: conservative (need HP for exploring)
+    Mid game: moderate
+    Late game: aggressive (ranking matters most)
+    """
+    if phase == "early":
+        return 50  # Don't fight unless healthy
+    elif phase == "mid":
+        return 35
+    else:  # late
+        return 20  # Fight even when low
+
+
+def _is_same_region(agent: dict, my_region: str) -> bool:
+    """Check if an agent is confirmed to be in the same region.
+    STRICT check: only returns True if regionId matches.
+    """
+    target_region = agent.get("regionId", "")
+    if not target_region:
+        # No regionId on target — CANNOT confirm same region
+        # This is the fix for the "out of range" attack spam bug
+        return False
+    return target_region == my_region
 
 
 def _estimate_enemy_weapon_bonus(agent: dict) -> int:
@@ -600,8 +734,66 @@ def _find_energy_drink(inventory: list) -> dict | None:
     return None
 
 
+def _select_best_target(targets: list, my_atk: int, my_weapon,
+                         my_def: int, weather: str,
+                         my_region: str, connections=None) -> dict | None:
+    """Select the best target using multi-factor scoring.
+    Factors:
+    - Kill potential (can we kill in few hits?)
+    - Risk (how much damage will we take?)
+    - Range (prefer same-region targets for guaranteed hit)
+    - HP (prefer low HP for easy kills)
+
+    Returns the best target, or None if no valid target.
+    """
+    w_range = get_weapon_range(my_weapon)
+    w_bonus = get_weapon_bonus(my_weapon)
+
+    scored = []
+    for t in targets:
+        if not isinstance(t, dict):
+            continue
+
+        # Skip targets we've already failed to hit
+        if t.get("id", "") in _failed_targets:
+            continue
+
+        # Check if in range
+        if not _is_in_range(t, my_region, w_range, connections):
+            continue
+
+        target_hp = t.get("hp", 100)
+        target_def = t.get("def", 5)
+        target_atk = t.get("atk", 10)
+
+        my_dmg = calc_damage(my_atk, w_bonus, target_def, weather)
+        enemy_dmg = calc_damage(target_atk, _estimate_enemy_weapon_bonus(t), my_def, weather)
+
+        hits_to_kill = max(1, (target_hp + my_dmg - 1) // my_dmg) if my_dmg > 0 else 99
+
+        # Score: lower is better target
+        # Prioritize: (1) can kill quickly, (2) take less damage, (3) same region
+        score = 0
+        score += hits_to_kill * 10  # Fewer hits to kill = much better
+        score += enemy_dmg * 2      # Less enemy damage = better
+        score -= my_dmg             # More our damage = better
+
+        # Strong bonus for same-region targets (guaranteed range)
+        if _is_same_region(t, my_region):
+            score -= 20  # Big bonus for same region
+
+        scored.append((t, score))
+
+    if not scored:
+        return None
+
+    # Return the target with lowest score (best)
+    scored.sort(key=lambda x: x[1])
+    return scored[0][0]
+
+
 def _select_weakest(targets: list) -> dict:
-    """Select target with lowest HP."""
+    """Select target with lowest HP. Fallback method."""
     return min(targets, key=lambda t: t.get("hp", 999))
 
 
@@ -609,12 +801,18 @@ def _is_in_range(target: dict, my_region: str, weapon_range: int,
                   connections=None) -> bool:
     """Check if target is in weapon range.
     Per combat-items.md: melee = same region, ranged = 1-2 regions.
+
+    FIXED: No longer assumes same region when regionId is missing.
+    Missing regionId = UNKNOWN position = cannot confirm in range.
     """
     target_region = target.get("regionId", "")
 
-    # No regionId on target — assume same region (visible agents in same region)
+    # If target has no regionId, we CAN'T confirm they're in range
+    # This fixes the "Target is out of range" spam bug
     if not target_region:
-        return True
+        log.debug("Target %s has no regionId — skipping (unknown position)",
+                  target.get("id", "?")[:8])
+        return False
 
     if target_region == my_region:
         return True  # Same region — melee and ranged both work
@@ -740,9 +938,14 @@ def learn_from_map(view: dict):
 
 def _choose_move_target(connections, danger_ids: set,
                          current_region: dict, visible_items: list,
-                         alive_count: int) -> str | None:
+                         alive_count: int, phase: str = "mid",
+                         view: dict = None) -> str | None:
     """Choose best region to move to.
     CRITICAL: NEVER move into a death zone or pending death zone!
+    Phase-adaptive movement:
+    - Early: prefer unexplored regions with potential items
+    - Mid: prefer center regions, facilities
+    - Late: prefer strategic positions with low enemy density
     """
     candidates = []
 
@@ -760,6 +963,9 @@ def _choose_move_target(connections, danger_ids: set,
             score = 1
             if conn in item_regions:
                 score += 5
+            # Prefer unexplored regions
+            if conn not in _explored_regions:
+                score += 3
             candidates.append((conn, score))
 
         elif isinstance(conn, dict):
@@ -781,6 +987,10 @@ def _choose_move_target(connections, danger_ids: set,
             if rid in item_regions:
                 score += 5
 
+            # Prefer unexplored regions
+            if rid not in _explored_regions:
+                score += 3
+
             # Facilities attract
             facs = conn.get("interactables", [])
             if facs:
@@ -792,8 +1002,16 @@ def _choose_move_target(connections, danger_ids: set,
             weather_penalty = {"storm": -2, "fog": -1, "rain": 0, "clear": 1}
             score += weather_penalty.get(weather, 0)
 
-            # Late game: strong bonus for safe regions
-            if alive_count < 30:
+            # Phase-based scoring
+            if phase == "early":
+                # Early: prefer regions with items or unexplored
+                if rid not in _explored_regions:
+                    score += 2
+            elif phase == "mid":
+                # Mid: moderate bonus for safe regions
+                score += 2
+            else:
+                # Late: strong bonus for central, safe positions
                 score += 3
 
             # MAP KNOWLEDGE: prefer center regions learned from Map
@@ -812,17 +1030,17 @@ def _choose_move_target(connections, danger_ids: set,
     candidates.sort(key=lambda x: x[1], reverse=True)
     return candidates[0][0]
 """
-View fields from api-summary.md (all implemented above — v1.5.2):
+View fields from api-summary.md (all implemented above — v2.1.0):
 ✅ self          — hp, ep, atk, def, inventory, equippedWeapon, isAlive
 ✅ currentRegion — id, name, terrain, weather, connections, interactables, isDeathZone
 ✅ connectedRegions — full Region objects OR bare string IDs (type-safe via _resolve_region)
 ✅ visibleRegions  — used for connectedRegions fallback + region ID lookup
-✅ visibleAgents   — guardians (HOSTILE!) + enemies + combat targeting
+✅ visibleAgents   — guardians (HOSTILE!) + enemies + combat targeting (FIXED range check)
 ✅ visibleMonsters — monster farming targets
 ✅ visibleNPCs     — acknowledged (NPCs are flavor per game-systems.md)
 ✅ visibleItems    — pickup + movement attraction scoring
 ✅ pendingDeathzones — {id, name} entries for death zone escape + movement planning
 ✅ recentLogs      — available for analysis
 ✅ recentMessages  — communication (curse disabled in v1.5.2)
-✅ aliveCount      — adaptive aggression (late game adjustment)
+✅ aliveCount      — phase-based strategy (early/mid/late game)
 """
