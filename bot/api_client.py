@@ -36,7 +36,11 @@ class MoltyAPI:
             )
 
     def _headers(self) -> dict:
-        h = {"X-Version": SKILL_VERSION}
+        h = {
+            "X-Version": SKILL_VERSION,
+            "User-Agent": f"MoltyRoyaleBot/{SKILL_VERSION}",
+            "Accept": "application/json",
+        }
         if self.api_key:
             h["X-API-Key"] = self.api_key
         return h
@@ -74,6 +78,16 @@ class MoltyAPI:
         if resp.status_code == 429:
             log.warning("Rate limited (429). Backing off.")
             raise APIError("RATE_LIMITED", "Too many requests", 429)
+
+        # Handle 403 Forbidden — server is blocking this request
+        if resp.status_code == 403:
+            log.warning("403 Forbidden on %s %s — API key may be invalid or IP blocked", method, path)
+            raise APIError("FORBIDDEN", "Access denied (403). Check API key or whitelist status.", 403)
+
+        # Handle other server errors (5xx) before parsing
+        if resp.status_code >= 500:
+            log.warning("%d server error on %s %s", resp.status_code, method, path)
+            raise APIError("SERVER_ERROR", f"Server returned {resp.status_code}", resp.status_code)
 
         data = self._safe_parse_json(resp.text)
 
@@ -173,6 +187,16 @@ class MoltyAPI:
         # Handle rate limiting
         if resp.status_code == 429:
             raise APIError("RATE_LIMITED", "Too many requests", 429)
+
+        # Handle 403 Forbidden
+        if resp.status_code == 403:
+            log.warning("403 Forbidden on POST /join — API key may be invalid or IP blocked")
+            raise APIError("FORBIDDEN", "Access denied (403). Check API key or whitelist status.", 403)
+
+        # Handle server errors
+        if resp.status_code >= 500:
+            log.warning("%d server error on POST /join", resp.status_code)
+            raise APIError("SERVER_ERROR", f"Server returned {resp.status_code}", resp.status_code)
 
         data = self._safe_parse_json(resp.text)
 

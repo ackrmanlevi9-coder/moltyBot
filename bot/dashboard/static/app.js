@@ -280,7 +280,7 @@ function renderAgentsTable() {
     return `<tr><td><strong>${esc(a.name||id)}</strong></td><td><span class="badge ${bc}">${st}</span></td>
       <td style="color:${(a.hp||0)>50?'var(--green)':'var(--red)'}"><strong>${a.hp||0}</strong>/${a.maxHp||100}</td>
       <td>📍 ${esc(a.region||'—')}</td><td>${weaponDisplay}</td>
-      <td><strong>${a.kills||0}</strong></td><td>${fmt(a.smoltz||0)}</td><td><strong style="color:var(--amber)">${fmt(a.moltz_earned||0)}</strong></td></tr>`;
+      <td><strong>${a.kills||0}</strong></td><td>${fmt(Math.max(a.smoltz||0, a.smoltz_earned||0))}</td><td><strong style="color:var(--amber)">${fmt(a.moltz_earned||0)}</strong></td></tr>`;
   }).join('');
 }
 
@@ -299,7 +299,7 @@ function renderHistory() {
   if (!tb) return;
   const history = (S.game_history || []).slice().reverse();
   if (!history.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="color:var(--text2);text-align:center">No games completed yet</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7" style="color:var(--text2);text-align:center">No games completed yet</td></tr>';
     return;
   }
   tb.innerHTML = history.map(g => {
@@ -312,6 +312,7 @@ function renderHistory() {
       <td><strong>#${g.final_rank||'?'}</strong></td>
       <td><strong>${g.kills||0}</strong></td>
       <td style="color:var(--amber)">${fmt(g.smoltz_earned||0)}</td>
+      <td style="color:var(--amber)"><strong>${fmt(g.moltz_earned||0)}</strong></td>
       <td>${g.entry_type||'free'}</td>
     </tr>`;
   }).join('');

@@ -103,14 +103,19 @@ class DashboardState:
         else:
             self.total_losses += 1
         moltz_earned = game_data.get("moltz_earned", 0)
+        smoltz_earned = game_data.get("smoltz_earned", 0)
         self.total_kills += game_data.get("kills", 0)
         self.total_moltz += moltz_earned
+        self.total_smoltz += smoltz_earned
 
         agent_key = game_data.get("agent_key")
         if agent_key and agent_key in self.agents:
-            # Safely get current moltz_earned and add new earnings
+            # Safely accumulate moltz_earned per agent
             current_moltz = self.agents[agent_key].get("moltz_earned", 0)
             self.agents[agent_key]["moltz_earned"] = current_moltz + moltz_earned
+            # Safely accumulate smoltz_earned per agent
+            current_smoltz = self.agents[agent_key].get("smoltz_earned", 0)
+            self.agents[agent_key]["smoltz_earned"] = current_smoltz + smoltz_earned
 
     def set_account(self, account_data: dict):
         """Add or update account."""
@@ -135,7 +140,10 @@ class DashboardState:
                 "total_wins": self.total_wins,
                 "total_losses": self.total_losses,
                 "total_moltz": self.total_moltz,
-                "total_smoltz": sum(a.get("smoltz", 0) for a in self.agents.values()),
+                "total_smoltz": max(
+                    self.total_smoltz,
+                    sum(int(a.get("smoltz") or 0) for a in self.agents.values()),
+                ),
                 "total_cross": self.total_cross,
                 "total_kills": self.total_kills,
                 "bots_running": self.bots_running,

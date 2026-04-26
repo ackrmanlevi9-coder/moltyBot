@@ -127,6 +127,15 @@ class Heartbeat:
                 log.error("Invalid API key. Re-run setup.")
                 self.running = False
                 return
+            if e.code == "FORBIDDEN":
+                log.warning("🚫 403 Forbidden on /accounts/me — API may be temporarily blocking. Retrying in 30s...")
+                dashboard_state.add_log("⚠️ 403 Forbidden — API temporarily blocking", "warning", self._agent_key)
+                await asyncio.sleep(30)
+                return
+            if e.code == "SERVER_ERROR":
+                log.warning("⚠️ Server error on /accounts/me — retrying in 15s")
+                await asyncio.sleep(15)
+                return
             raise
 
         # Step 2: Determine state

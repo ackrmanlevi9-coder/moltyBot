@@ -31,13 +31,17 @@ async def join_free_game(api: MoltyAPI) -> tuple[str, str]:
         pass
 
     # Queue loop — no extra sleep, server Long Poll throttles (per free-games.md)
+    import asyncio
     attempt = 0
+    consecutive_403 = 0
     while True:
         attempt += 1
         log.info("Free queue attempt #%d...", attempt)
 
         try:
             resp = await api.post_join("free")
+            consecutive_403 = 0  # Reset on successful response
+
             if not isinstance(resp, dict):
                 log.warning("Unexpected join response type: %s", type(resp).__name__)
                 continue
@@ -71,4 +75,17 @@ async def join_free_game(api: MoltyAPI) -> tuple[str, str]:
             if e.code == "ACCOUNT_ALREADY_IN_GAME":
                 log.info("Already in a game. Returning to heartbeat.")
                 raise
+            if e.code == "FORBIDDEN":
+                consecutive_403 += 1
+                wait = min(30 * consecutive_403, 120)
+                log.warning("🚫 403 Forbidden (#%d) — backing off %ds", consecutive_403, wait)
+                if consecutive_403 >= 10:
+                    log.error("❌ Too many consecutive 403 errors. API key may be invalid.")
+                    raise
+                await asyncio.sleep(wait)
+                continue
+            if e.code == "SERVER_ERROR":
+                log.warning("⚠️ Server error — retrying in 15s")
+                await asyncio.sleep(15)
+                continue
             log.warning("Join error: %s — retrying", e)
