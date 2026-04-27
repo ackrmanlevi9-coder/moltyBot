@@ -27,6 +27,31 @@ from bot.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def _as_int(value, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if not cleaned:
+            return default
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return default
+    return default
+
+
+def _account_smoltz(me: dict) -> int:
+    for key in ("balance", "sMoltz", "smoltz", "SMOLTZ", "s_moltz"):
+        if key in me and me.get(key) is not None:
+            return _as_int(me.get(key))
+    return 0
+
+
 class Heartbeat:
     """Main heartbeat loop — runs forever, manages the full agent lifecycle.
     Supports running multiple agents in a single Python process."""
@@ -145,7 +170,7 @@ class Heartbeat:
         # Feed dashboard with account info — use CONSISTENT key
         self._agent_key = str(me.get("agentId", me.get("id", "agent-1")))
         self._agent_name = me.get("agentName", me.get("name", "Agent"))
-        balance = me.get("balance", 0)
+        balance = _account_smoltz(me)
 
         # Include wallet addresses + keys for dashboard display
         creds_for_dash = load_credentials() or {}

@@ -4,7 +4,16 @@
  */
 const $ = id => document.getElementById(id);
 const esc = s => { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; };
-const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : String(n);
+const num = v => {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const parsed = Number(String(v).replace(/,/g, '').trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+const fmt = n => {
+  n = num(n);
+  return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : String(Math.round(n));
+};
 
 // ─── Item display names ───
 const ITEM_NAMES = {
@@ -108,6 +117,7 @@ const counters = {};
 function animateNum(id, target) {
   const el = $(id);
   if (!el) return;
+  target = num(target);
   const key = id;
   const current = counters[key] || 0;
   if (current === target) return;
@@ -169,7 +179,7 @@ function renderAgentCards() {
     return n1 - n2;
   });
 
-  const hash = JSON.stringify(entries.map(([id,a]) => id + (a.hp||0) + (a.ep||0) + (a.status||'') + (a.last_action||'') + (a.kills||0) + (a.alive_count||0) + (a.inventory||[]).length + (a.enemies||[]).length + (a.region_items||[]).length + (a.region||'')));
+  const hash = JSON.stringify(entries.map(([id,a]) => id + (a.hp||0) + (a.ep||0) + (a.status||'') + (a.last_action||'') + (a.kills||0) + (a.smoltz||0) + (a.smoltz_earned||0) + (a.moltz_earned||0) + (a.alive_count||0) + (a.inventory||[]).length + (a.enemies||[]).length + (a.region_items||[]).length + (a.region||'')));
   if (hash === prevAgentHash) return;
   prevAgentHash = hash;
 
@@ -280,7 +290,7 @@ function renderAgentsTable() {
     return `<tr><td><strong>${esc(a.name||id)}</strong></td><td><span class="badge ${bc}">${st}</span></td>
       <td style="color:${(a.hp||0)>50?'var(--green)':'var(--red)'}"><strong>${a.hp||0}</strong>/${a.maxHp||100}</td>
       <td>📍 ${esc(a.region||'—')}</td><td>${weaponDisplay}</td>
-      <td><strong>${a.kills||0}</strong></td><td>${fmt(Math.max(a.smoltz||0, a.smoltz_earned||0))}</td><td><strong style="color:var(--amber)">${fmt(a.moltz_earned||0)}</strong></td></tr>`;
+      <td><strong>${a.kills||0}</strong></td><td>${fmt(Math.max(num(a.smoltz), num(a.smoltz_earned)))}</td><td><strong style="color:var(--amber)">${fmt(a.moltz_earned||0)}</strong></td></tr>`;
   }).join('');
 }
 

@@ -9,6 +9,56 @@ from bot.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def _as_int(value, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if not cleaned:
+            return default
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return default
+    return default
+
+
+def _first_int(data: dict, keys: tuple[str, ...], default: int = 0) -> int:
+    for key in keys:
+        if key in data and data.get(key) is not None:
+            return _as_int(data.get(key), default)
+    return default
+
+
+def _extract_rewards(result: dict) -> tuple[int, int]:
+    rewards = result.get("rewards", {})
+    if not isinstance(rewards, dict):
+        rewards = {}
+
+    smoltz = _first_int(
+        rewards,
+        ("sMoltz", "smoltz", "SMOLTZ", "s_moltz", "sMoltzEarned", "smoltzEarned"),
+    )
+    moltz = _first_int(
+        rewards,
+        ("moltz", "Moltz", "MOLTZ", "moltzEarned"),
+    )
+
+    if smoltz == 0:
+        smoltz = _first_int(
+            result,
+            ("sMoltz", "smoltz", "SMOLTZ", "s_moltz", "smoltzEarned", "sMoltzEarned", "balanceDelta"),
+        )
+    if moltz == 0:
+        moltz = _first_int(result, ("moltz", "Moltz", "MOLTZ", "moltzEarned"))
+
+    return smoltz, moltz
+
+
 async def settle_game(game_result: dict, entry_type: str, memory: AgentMemory, agent_key: str = None):
     """
     Process game end:
@@ -20,9 +70,7 @@ async def settle_game(game_result: dict, entry_type: str, memory: AgentMemory, a
     is_winner = result.get("isWinner", False)
     final_rank = result.get("finalRank", 0)
     kills = result.get("kills", 0)
-    rewards = result.get("rewards", {})
-    smoltz_earned = rewards.get("sMoltz", 0)
-    moltz_earned = rewards.get("moltz", 0)
+    smoltz_earned, moltz_earned = _extract_rewards(result)
     death_cause = result.get("deathCause", "unknown")
     survived_turns = result.get("survivedTurns", 0)
 

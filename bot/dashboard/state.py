@@ -16,6 +16,32 @@ MAX_LOGS = 500
 MAX_HISTORY = 50
 
 
+def _as_int(value, default: int = 0) -> int:
+    """Convert API numeric values that may arrive as int, float, or numeric string."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if not cleaned:
+            return default
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return default
+    return default
+
+
+def _first_int(data: dict, keys: tuple[str, ...], default: int = 0) -> int:
+    for key in keys:
+        if key in data and data.get(key) is not None:
+            return _as_int(data.get(key), default)
+    return default
+
+
 class DashboardState:
     """Singleton shared state between bot and dashboard."""
 
@@ -70,6 +96,12 @@ class DashboardState:
         if agent_id not in self.agents:
             self.agents[agent_id] = {}
             self.agent_logs[agent_id] = deque(maxlen=MAX_LOGS)
+        if "smoltz" in data:
+            data["smoltz"] = _as_int(data["smoltz"])
+        if "smoltz_earned" in data:
+            data["smoltz_earned"] = _as_int(data["smoltz_earned"])
+        if "moltz_earned" in data:
+            data["moltz_earned"] = _as_int(data["moltz_earned"])
         self.agents[agent_id].update(data)
         self.agents[agent_id]["last_update"] = time.time()
         self.last_update = time.time()
@@ -97,24 +129,30 @@ class DashboardState:
     def record_game(self, game_data: dict):
         """Record a completed game to history."""
         game_data["timestamp"] = time.time()
+        game_data["kills"] = _as_int(game_data.get("kills"))
+        game_data["moltz_earned"] = _first_int(game_data, ("moltz_earned", "moltz", "Moltz", "MOLTZ"))
+        game_data["smoltz_earned"] = _first_int(
+            game_data,
+            ("smoltz_earned", "sMoltz", "smoltz", "SMOLTZ", "balance_delta", "balanceDelta"),
+        )
         self.game_history.append(game_data)
         if game_data.get("is_winner"):
             self.total_wins += 1
         else:
             self.total_losses += 1
-        moltz_earned = game_data.get("moltz_earned", 0)
-        smoltz_earned = game_data.get("smoltz_earned", 0)
-        self.total_kills += game_data.get("kills", 0)
+        moltz_earned = game_data["moltz_earned"]
+        smoltz_earned = game_data["smoltz_earned"]
+        self.total_kills += game_data["kills"]
         self.total_moltz += moltz_earned
         self.total_smoltz += smoltz_earned
 
         agent_key = game_data.get("agent_key")
         if agent_key and agent_key in self.agents:
             # Safely accumulate moltz_earned per agent
-            current_moltz = self.agents[agent_key].get("moltz_earned", 0)
+            current_moltz = _as_int(self.agents[agent_key].get("moltz_earned"))
             self.agents[agent_key]["moltz_earned"] = current_moltz + moltz_earned
             # Safely accumulate smoltz_earned per agent
-            current_smoltz = self.agents[agent_key].get("smoltz_earned", 0)
+            current_smoltz = _as_int(self.agents[agent_key].get("smoltz_earned"))
             self.agents[agent_key]["smoltz_earned"] = current_smoltz + smoltz_earned
 
     def set_account(self, account_data: dict):
@@ -142,7 +180,8 @@ class DashboardState:
                 "total_moltz": self.total_moltz,
                 "total_smoltz": max(
                     self.total_smoltz,
-                    sum(int(a.get("smoltz") or 0) for a in self.agents.values()),
+                    sum(_as_int(a.get("smoltz")) for a in self.agents.values()),
+                    sum(_as_int(a.get("smoltz_earned")) for a in self.agents.values()),
                 ),
                 "total_cross": self.total_cross,
                 "total_kills": self.total_kills,
