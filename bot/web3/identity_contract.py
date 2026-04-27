@@ -1,11 +1,11 @@
 """
 ERC-8004 Identity Registry on-chain calls.
-register() from Owner EOA → returns tokenId → POST /api/identity.
+register() from Owner EOA -> returns tokenId -> POST /api/identity.
 Uses PoA-enabled Web3 provider.
 
-v1.5.2: Gas is DELEGATED for all ERC-8004 operations (relayed by Tx delegator).
-The agent MUST NOT ask the owner to fund CROSS gas for identity registration.
-We still set gasLimit manually to prevent ethers from failing on estimation.
+Docs say ERC-8004 gas is delegated/relayed. A raw RPC transaction is not
+delegated, so this module first reuses any existing NFT and only then attempts
+direct minting as a best-effort fallback.
 """
 from web3 import Web3
 from eth_account import Account
@@ -16,17 +16,59 @@ from bot.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+ZERO_ADDRESS_TOPIC = "0x" + "0" * 64
+TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+
+
+def _address_topic(address: str) -> str:
+    return "0x" + Web3.to_checksum_address(address)[2:].lower().rjust(64, "0")
+
+
+def find_owned_identity_token(owner_address: str) -> int | None:
+    """
+    Find an already-minted ERC-8004 NFT owned by owner_address.
+    This handles the case where minting succeeded elsewhere, but /api/identity was not saved.
+    """
+    try:
+        w3 = get_w3()
+        registry = w3.eth.contract(
+            address=Web3.to_checksum_address(IDENTITY_REGISTRY),
+            abi=IDENTITY_ABI,
+        )
+        owner = Web3.to_checksum_address(owner_address)
+        logs = w3.eth.get_logs({
+            "fromBlock": 0,
+            "toBlock": "latest",
+            "address": Web3.to_checksum_address(IDENTITY_REGISTRY),
+            "topics": [TRANSFER_TOPIC, ZERO_ADDRESS_TOPIC, _address_topic(owner)],
+        })
+
+        for event_log in reversed(logs):
+            topics = event_log.get("topics", [])
+            if len(topics) < 4:
+                continue
+            token_id = int(topics[3].hex(), 16)
+            current_owner = registry.functions.ownerOf(token_id).call()
+            if current_owner.lower() == owner.lower():
+                log.info("Found existing ERC-8004 identity NFT: tokenId=%d", token_id)
+                return token_id
+
+    except Exception as e:
+        log.warning("Could not scan existing ERC-8004 identity NFTs: %s", e)
+
+    return None
+
 
 async def register_identity_onchain(owner_private_key: str) -> int | None:
     """
-    Call register() on ERC-8004 Identity Registry from Owner EOA.
-    Returns tokenId (= agentId) or None if failed (no crash).
-
-    v1.5.2: Gas is delegated — no gas balance check needed.
-    If a gas-related error occurs, treat as client-side problem (e.g. missing gasLimit),
-    never escalate to the owner as a funding request.
+    Ensure the Owner EOA has an ERC-8004 identity NFT.
+    Returns tokenId (= agentId) or None if it cannot be resolved/minted.
     """
     acct = Account.from_key(owner_private_key)
+
+    existing_token_id = find_owned_identity_token(acct.address)
+    if existing_token_id is not None:
+        return existing_token_id
 
     try:
         w3 = get_w3()
@@ -35,8 +77,6 @@ async def register_identity_onchain(owner_private_key: str) -> int | None:
             abi=IDENTITY_ABI,
         )
 
-        # Gas is delegated (relayed by Tx delegator), but we still set gasLimit
-        # manually to prevent ethers from failing early on revert estimation.
         tx = registry.functions.register().build_transaction({
             "from": acct.address,
             "nonce": w3.eth.get_transaction_count(acct.address),
@@ -52,7 +92,6 @@ async def register_identity_onchain(owner_private_key: str) -> int | None:
             log.error("ERC-8004 register() TX failed: %s", tx_hash.hex())
             return None
 
-        # Extract agentId from Transfer event logs (ERC-721 mint)
         for event_log in receipt.logs:
             if len(event_log.topics) >= 4:
                 token_id = int(event_log.topics[3].hex(), 16)
@@ -63,6 +102,14 @@ async def register_identity_onchain(owner_private_key: str) -> int | None:
         return None
 
     except Exception as e:
-        log.error("ERC-8004 register() error (gas is delegated — this is a client-side issue): %s", e)
+        err = str(e)
+        if "insufficient funds" in err.lower():
+            log.error(
+                "ERC-8004 register() could not be sent as a raw RPC transaction because "
+                "Owner EOA has no CROSS for gas. Docs say identity gas is delegated, but "
+                "this bot currently has no relayer endpoint and raw transactions still need gas: %s",
+                e,
+            )
+        else:
+            log.error("ERC-8004 register() error: %s", e)
         return None
-
