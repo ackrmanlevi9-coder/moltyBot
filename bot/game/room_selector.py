@@ -8,12 +8,37 @@ from bot.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def _as_int(value, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if not cleaned:
+            return default
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return default
+    return default
+
+
+def _account_smoltz(me_data: dict) -> int:
+    for key in ("balance", "sMoltz", "smoltz", "SMOLTZ", "s_moltz"):
+        if key in me_data and me_data.get(key) is not None:
+            return _as_int(me_data.get(key))
+    return 0
+
+
 def select_room(me_data: dict) -> str:
     """
     Determine which room type to join.
     Returns 'free' or 'paid'.
     """
-    balance = me_data.get("balance", 0)
+    balance = _account_smoltz(me_data)
     readiness = me_data.get("readiness", {})
     whitelist_ok = readiness.get("whitelistApproved", False)
     wallet_ok = readiness.get("walletAddress") is not None

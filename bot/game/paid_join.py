@@ -12,6 +12,31 @@ from bot.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def _as_int(value, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if not cleaned:
+            return default
+        try:
+            return int(float(cleaned))
+        except ValueError:
+            return default
+    return default
+
+
+def _account_smoltz(me_data: dict) -> int:
+    for key in ("balance", "sMoltz", "smoltz", "SMOLTZ", "s_moltz"):
+        if key in me_data and me_data.get(key) is not None:
+            return _as_int(me_data.get(key))
+    return 0
+
+
 async def join_paid_game(api: MoltyAPI) -> tuple[str, str]:
     """
     Join a paid room via EIP-712 signed flow.
@@ -19,7 +44,7 @@ async def join_paid_game(api: MoltyAPI) -> tuple[str, str]:
     """
     # Step 1: Balance check (mandatory before signing per paid-games.md)
     me = await api.get_accounts_me()
-    balance = me.get("balance", 0)
+    balance = _account_smoltz(me)
     if balance < PAID_ENTRY_FEE_SMOLTZ:
         raise RuntimeError(
             f"Insufficient sMoltz: {balance}/{PAID_ENTRY_FEE_SMOLTZ}. "
